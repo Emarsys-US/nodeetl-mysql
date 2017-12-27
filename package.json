@@ -1,0 +1,35 @@
+{
+  "name": "nodeetl-mysql",
+  "version": "0.0.1",
+  "description": "Mysql Module for Node ETL - Emarsys",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Emarsys-US/nodeetl-mysql.git"
+  },
+  "keywords": [
+    "mysql",
+    "node",
+    "etl",
+    "emarsys"
+  ],
+  "author": "Adam Patarino @apatarino",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Emarsys-US/nodeetl-mysql/issues"
+  },
+  "homepage": "https://github.com/Emarsys-US/nodeetl-mysql#readme",
+  "dependencies": {
+    "async": "^2.6.0",
+    "chai": "^4.1.2",
+    "chai-as-promised": "^7.1.1",
+    "firstline": "^1.2.1",
+    "lodash": "^4.17.4",
+    "mocha": "^4.0.1",
+    "mysql": "^2.15.0",
+    "path": "^0.12.7"
+  }
+}
