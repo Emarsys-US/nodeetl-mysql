@@ -18,6 +18,16 @@ module.exports = class MySQL {
     constructor (connection) {
         if(!_.isString(connection) && !_.isObject(connection)) throw new Error('Mysql Class - Please provide a connect string or connection object https://github.com/mysqljs/mysql#introduction');
         this.pool = mysql.createPool(connection);
+        this.debug = false;
+        this.log = console.log;
+    }
+    
+    /**
+     * Set Debug
+     */
+    debug(winston = null) {
+        this.debug = true;
+        if(winston) this.log = winston.debug;
     }
     
     /**
@@ -46,6 +56,7 @@ module.exports = class MySQL {
             self.getConnection()
             .then(function(db){
                 db.query(command,function(err,response){
+                    if(err && self.debug) self.log(err);
                     if(err) return reject(err);
                     db.release();
                     resolve(response);
@@ -62,13 +73,13 @@ module.exports = class MySQL {
     tableExists(table) {
         const self = this;
         return new Promise(function(resolve,reject){
-            self.query(`SELECT 1 FROM ${table} LIMIT 1`)
-            .then(function(){
-                resolve();
-            })
-            .catch(function(err){
+            self.query(`SHOW TABLES LIKE '${table}'`)
+            .then(function(results){
+                if(results.length && self.debug) self.log(`${table} found`);
+                if(results.length) return resolve();
+                if(!results.length && self.debug) self.log(`${table} NOT found`);
                 reject();
-            });
+            }).catch(reject);
         });
     }
     
@@ -79,9 +90,12 @@ module.exports = class MySQL {
      * @return {array}            each of the headers in an array
      */
     getHeaders(filepath, delimiter=",") {
+        const self = this;
         return new Promise(function(resolve,reject){
+            if(!filepath) return reject(new Error("Missing filepath parameter"));
             firstline(filepath)
             .then(function(line){
+                if(self.debug) self.log(`Headers using ${delimiter} delimiter`, line.split(delimiter));
                 resolve(line.split(delimiter));
             }).catch(reject);
         });
@@ -100,17 +114,26 @@ module.exports = class MySQL {
         const self = this;
         return new Promise(function(resolve,reject){
             if(!table) return reject(new Error('Missing Table Name on createTable method for MySQL Class'));
-
-            self.getConnection()
-            .then(function(db){
-                db.query(`DROP TABLE IF EXISTS ${table}_staging`,function(err, results){
-                    if(err) return reject(new Error('Error dropping existing staging table in MySQL Class', err.message));
-                    db.query(`CREATE TABLE ${table}_staging LIKE ${table}`, function(err, results){
-                        if(err) return reject(new Error(`Creating a new Staging table like ${table} in MySQL Class`, err.message));
-                        resolve(table + '_staging');
+            
+            self.tableExists(table)
+            .then(function(){
+                if(self.debug) self.log(`${table} found to copy from. Creating staging table.`);
+                self.getConnection()
+                .then(function(db){
+                    db.query(`DROP TABLE IF EXISTS ${table}_staging`,function(err, results){
+                        if(err) return reject(new Error('Error dropping existing staging table in MySQL Class', err.message));
+                        db.query(`CREATE TABLE ${table}_staging LIKE ${table}`, function(err, results){
+                            if(err) return reject(new Error(`Creating a new Staging table like ${table} in MySQL Class`, err.message));
+                            if(self.debug) self.log(`${table}_staging created by copying ${table}`);
+                            resolve(table + '_staging');
+                        });
                     });
-                });
-            }).catch(reject);
+                }).catch(reject);
+            })
+            .catch(function(err){
+                return reject(new Error('Table does not exist to copy for importing file. Ensure table is already defined OR use importFileAndCreateTable() method, in MySQL Class'));
+            });
+            
         });
     }
     
@@ -118,21 +141,50 @@ module.exports = class MySQL {
      * createNewTable
      * @param  {string} name    Name of table to be creatws
      * @param  {array}  headers List of header names
+     * @param  {bool}   overwrite Overwrite if an existing table is found
      * @return {string}         Name of new table
      */
-    createNewTable(name, headers) {
+    createNewTable(name, headers, overwrite=false) {
         const self = this;
         
         return new Promise(function(resolve,reject){
-            if(!headers && !_.isArray(headers) && !headers.length) return reject('No headers provided to create new table or not passed as an array in MySQL Class');
-            let headerString = headers.map(function(header){ return header + ' VARCHAR(255)';}).join(', ');
-
-            self.query(`CREATE TABLE ${name} (${headerString})`)
-            .then(function(results){
-                resolve(name);
-            }).catch(function(err){
-                if(err) return reject(new Error('Error creating new table with provided headers for MySQL Class' + err));
+            if(!name) return reject(new Error("Must provide a name for the new table in createNewTable()"));
+            if(!headers && !_.isArray(headers) && !headers.length) return reject(new Error('No headers provided to create new table or not passed as an array in MySQL Class'));
+            let headerString = headers.map(function(header){ return header + ' VARCHAR(10000)';}).join(', ');
+            
+            if(self.debug) self.log(`Creating new table called ${name}. Headers string for CREATE command: ${headerString}`);
+            
+            let create = function() {
+                return new Promise(function(resolve,reject){
+                    self.query(`CREATE TABLE ${name} (${headerString})`)
+                    .then(function(results){
+                        if(self.debug) self.log(`${name} successfully created`);
+                        resolve(name);
+                    }).catch(function(err){
+                        if(err) return reject(new Error('Error creating new table in MySQL Class' + err));
+                    });
+                });
+            };
+            
+            let drop = function() {
+                return new Promise(function(resolve,reject){
+                    if(self.debug) self.log(`${name} already exists, checking for overwrite param`);
+                    if(!overwrite) return reject(new Error('Error creating new table. One already exists with the name provided and overwrite parameter was not set to TRUE'));
+                    if(self.debug) self.log(`Overwritng ${name} with new table definition`);
+                    self.query(`DROP TABLE IF EXISTS ${name}`)
+                    .then(create)
+                    .then(resolve)
+                    .catch(reject);
+                });
+            };
+            
+            self.tableExists(name)
+            .then(drop, create)
+            .then(resolve)
+            .catch(function(err){
+                reject(new Error('Error creating new table in MySQL Class Method createNewTable()' + err));
             });
+            
         });
     }
     
@@ -153,26 +205,27 @@ module.exports = class MySQL {
             .then(function(){
                 self.getConnection()
                 .then(function(db){
+                    if(self.debug) self.log(`Swapping ${table}_staging with ${table}`);
                     db.query(`RENAME TABLE ${table} TO ${table}_drop`,function(err){
                         if(err) return reject(err);
                         db.query(`RENAME TABLE ${table}_staging TO ${table}`,function(err){
                             if(err) return reject(err);
                             db.query(`DROP TABLE ${table}_drop`,function(err){
                                 if(err) return reject(err);
+                                if(self.debug) self.log(`Old ${table} dropped and ${table}_staging renamed to ${table}. Swap complete`);
                                 resolve();
                             });
                         });
                     });
                 }).catch(reject);
             },function(){
+                if(self.debug) self.log(`${table} doesn't exist so renaming ${table}_staging to ${table}`);
                 self.query(`RENAME TABLE ${table}_staging TO ${table}`)
-                .then(function(err, response){
-                    if(err) return reject(err);
-                    resolve();
-                });
+                .then(function(response){
+                    resolve(table);
+                }).catch(reject);
             }).catch(reject);
             
         });
     }
-    
 };
