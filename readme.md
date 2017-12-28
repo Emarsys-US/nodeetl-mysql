@@ -1,6 +1,6 @@
 # Node ETL - MySQL Module
 
-*What is this?* 
+**What is this?**
 This module / helper is used for interfacing with mysql. It helps with common tasks like loading files to tables, manipulating tables, etc.
 
 This library is promise based. Most or all commands will return a promise.
@@ -36,7 +36,7 @@ When you create a new `mysql` instance, a pool is automatically generated. You c
 
 _Note_ This is primary used as an internal method. You usually won't need to use this.
 
-*Example*
+**Example**
 ```javascript
 mysql.getConnection()
 .then(function(connection){
@@ -44,7 +44,8 @@ mysql.getConnection()
 })
 ```
 
-*Returns* (Promise | Object)
+**Returns** (Promise | Object)
+
 A promise with the `connection` from the pool. You can release the connection back to the pool using `connection.release()`.
 
 ---
@@ -52,10 +53,10 @@ A promise with the `connection` from the pool. You can release the connection ba
 ### query(command)
 You can run a query through the `mysql` instance. This will automatically acquire a connection from the pool, run the command and release the connection for you. Any valid query can be used.
 
-*Parameters*
+**Parameters**
 * `command` (string) - The sql command to run
 
-*Example*
+**Example**
 ```javascript
 mysql.query(`CREATE TABLE copy LIKE original`)
 .then(function(results){
@@ -65,7 +66,8 @@ mysql.query(`CREATE TABLE copy LIKE original`)
 })
 ```
 
-*Returns* (Promise | Object)
+**Returns** (Promise | Object)
+
 A Promise with the `results` object from MySQL
 
 ---
@@ -73,10 +75,10 @@ A Promise with the `results` object from MySQL
 ### tableExists(table)
 You can check if a table exists by passing it's name to this method.
 
-*Parameters*
+**Parameters**
 * `table` (sting) - name of table to look for
 
-*Examples*
+**Examples**
 ```javascript
 mysql.tableExists('test')
 .then(function(){
@@ -100,7 +102,8 @@ mysql.tableExists('test')
  )
 ```
 
-*Returns* (Promise)
+**Returns** (Promise)
+
 A promise - resolving if table is found, rejecting if table is not found.
 
 ---
@@ -108,11 +111,11 @@ A promise - resolving if table is found, rejecting if table is not found.
 ### getHeaders(filepath, delimiter)
 This is a utility for getting the headers of a text file
 
-*Parameters*
+**Parameters**
 * `filepath` (string) - Location of the file
 * `delimiter` (optional | default "," | string) - Delimiter separating the fields. 
 
-*Examples*
+**Examples**
 ```javascript
 mysql.getHeaders('./tmp/myfile.csv ')
 .then(function(headers){
@@ -128,7 +131,8 @@ mysql.getHeaders('./tmp/myfile.tsv', '\t')
 })
 ```
 
-*Returns* (Promise Array)
+**Returns** (Promise Array)
+
 A Promise passing an `Array` of the headers from the file.
 
 ---
@@ -136,10 +140,10 @@ A Promise passing an `Array` of the headers from the file.
 ### createStagingTable()
 This is mostly an internal method used by the class when importing files. But you can use it to create a staging copy of an existing table.
 
-*Parameters*
+**Parameters**
 * table (string) - The table to make a copy of
 
-*Examples*
+**Examples**
 ```javascript
 mysql.createStagingTable('table')
 .then(function(newTable){
@@ -148,19 +152,20 @@ mysql.createStagingTable('table')
 })
 ```
 
-*Returns* (Promise | String)
+**Returns** (Promise | String)
+
 A promise with the name of the new table - always the name of the table passed + `_staging` like "table_staging"
 
 ---
 
 ### createNewTable()
 
-*Parameters*
+**Parameters**
 * `name` (string) - The name of the table to create
 * `headers` (array) - An array of the header names. All headers are automatically set to VARCHAR(10000).
 * `overwrite` (bool | Default `false`) - If an existing table already exists with the `name`, you can overwrite with by passing `true`.
 
-*Examples*
+**Examples**
 ```javascript
 mysql.createNewTable('newTable', ['email', 'first', 'last'])
 .then(function(newTable){
@@ -168,7 +173,8 @@ mysql.createNewTable('newTable', ['email', 'first', 'last'])
 })
 ```
 
-*Returns* (Promise | string)
+**Returns** (Promise | string)
+
 Returns a promise containing the name of the new table created
 
 ---
@@ -180,10 +186,10 @@ This is used to reduce the amount of time a table or rows in a table are locked 
 
 In the event that `table` doesn't exist and only `table_staging` is found, then it simply renames `table_staging` to `table`.
 
-*Parameters*
+**Parameters**
 * `table` (string) - Name of table to swap/rename.
 
-*Examples*
+**Examples**
 ```javascript
 mysql.swaptables('table')
 .then(function(){
@@ -194,7 +200,8 @@ mysql.swaptables('table')
 })
 ```
 
-*Returns* (Promise)
+**Returns** (Promise)
+
 Resolves if the swap occurs successfully, rejects if there was an issue or table_staging wasn't found.
 
 ---
