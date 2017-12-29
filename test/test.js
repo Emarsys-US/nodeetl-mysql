@@ -15,7 +15,8 @@ const mysql = new MySQL({
   database : 'nodeetl-mysql'
 });
 
-describe('Class Methods', function(){
+
+describe('Table Methods', function(){
     before(function(done){
         mysql.query('CREATE TABLE IF NOT EXISTS test (email VARCHAR(255), first VARCHAR(255), last VARCHAR(255))')
         .then(function(){
@@ -96,5 +97,27 @@ describe('Class Methods', function(){
             }).catch(done);
         });
     });
+});
 
+describe('File Methods', function(){
+    before(function(done){
+        mysql.query('CREATE TABLE IF NOT EXISTS data (email VARCHAR(255), first VARCHAR(255), last VARCHAR(255))')
+        .then(function(){
+            done();
+        }).catch(done);
+    });
+    
+    // after(function(done){
+    //     mysql.query('DROP TABLE IF EXISTS data')
+    //     .then(function(){
+    //         done();
+    //     })
+    //     .catch(done);
+    // });
+    
+    describe('Imports', function(){
+        it('Imports File to an Existing Table', function(){
+            return mysql.importFileToTable({filepath: './test/data.csv', quotes: '"'}).should.eventually.equal(4)
+        })
+    });
 });

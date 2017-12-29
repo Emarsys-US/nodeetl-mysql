@@ -25,7 +25,7 @@ module.exports = class MySQL {
     /**
      * Set Debug
      */
-    debug(winston = null) {
+    setDebug(winston = null) {
         this.debug = true;
         if(winston) this.log = winston.debug;
     }
@@ -150,7 +150,7 @@ module.exports = class MySQL {
         return new Promise(function(resolve,reject){
             if(!name) return reject(new Error("Must provide a name for the new table in createNewTable()"));
             if(!headers && !_.isArray(headers) && !headers.length) return reject(new Error('No headers provided to create new table or not passed as an array in MySQL Class'));
-            let headerString = headers.map(function(header){ return header + ' VARCHAR(10000)';}).join(', ');
+            let headerString = headers.map(function(header){ return header + ' VARCHAR(1000)';}).join(', ');
             
             if(self.debug) self.log(`Creating new table called ${name}. Headers string for CREATE command: ${headerString}`);
             
@@ -222,10 +222,50 @@ module.exports = class MySQL {
                 if(self.debug) self.log(`${table} doesn't exist so renaming ${table}_staging to ${table}`);
                 self.query(`RENAME TABLE ${table}_staging TO ${table}`)
                 .then(function(response){
-                    resolve(table);
+                    resolve();
                 }).catch(reject);
             }).catch(reject);
             
         });
     }
+    
+    /**
+     * importFile
+     * Imports a delimited text file into a table
+     * An existing table is required
+     * @param  {string} filepath        Path of file to target
+     * @param  {string} table           Table where data will be loaded. If none is provided, falls back to name of file
+     * @param  {String} [delimiter=","] Delimiter in file for parsing header, defaults to ","
+     * @return {promsie}                 resovles
+     */
+    importFileToTable({filepath, table = "", headers = '', delimiter = ",", quotes = '', newline = "\n"}) {
+        const self = this;
+        
+        return new Promise(function(resolve,reject){
+            if(!filepath) return reject(new Error("Missing File Path"));
+            if(!table) table = path.parse(filepath).name;
+            if(headers) headers = headers.join(', ');
+            
+            self.tableExists(table)
+            .then(function(){
+                return self.createStagingTable(table);
+            })
+            .then(function(){
+                return self.query(`LOAD DATA LOCAL INFILE '${filepath}' INTO TABLE ${table}_staging FIELDS TERMINATED BY '${delimiter}' ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}' (${headers})`)
+            })
+            .then(function(results){
+                return new Promise(function(resolve,reject){
+                    if(self.debug) self.log('File loaded with results:', results);
+                    self.swapTables(table)
+                    .then(function(){
+                        if(self.debug) self.log('Tables swapped, data fully loaded');
+                        resolve(results.affectedRows)
+                    }).catch(reject);
+                });
+            })
+            .then(resolve)
+            .catch(reject);
+        });
+    }
+    
 };

@@ -26,10 +26,24 @@ let mysql = new MySQL('user:pass@mysqlurl:port/database');
 ```javascript
 const logger = requrie('winston');
 // ... later
-if(process.env.LOGGING_LEVEL === 'debug') mysql.debug(logger);
+if(process.env.LOGGING_LEVEL === 'debug') mysql.setDebug(logger);
 ```
 
 ## Methods
+
+**Utilities and Table Management**
+* [getConnection](#getConnection)
+* [query](#querycommand)
+* [tableExists](#tableExiststable)
+* [getHeaders](#getheadersfilepath-delimiter)
+* [createStagingTable](#createstagingtabletable)
+* [createNewTable](#createnewtablename-headers-overwrite)
+* [swapTables](#swaptablestable)
+
+**File Functions**
+* [importFileToTable](#importfiletotableoptsobject)
+
+---
 
 ### getConnection()
 When you create a new `mysql` instance, a pool is automatically generated. You can manually acquire a connection do run multiple sql commands if needed.
@@ -137,7 +151,7 @@ A Promise passing an `Array` of the headers from the file.
 
 ---
 
-### createStagingTable()
+### createStagingTable('table')
 This is mostly an internal method used by the class when importing files. But you can use it to create a staging copy of an existing table.
 
 **Parameters**
@@ -158,7 +172,7 @@ A promise with the name of the new table - always the name of the table passed +
 
 ---
 
-### createNewTable()
+### createNewTable(name, headers, overwrite)
 
 **Parameters**
 * `name` (string) - The name of the table to create
@@ -203,6 +217,39 @@ mysql.swaptables('table')
 **Returns** (Promise)
 
 Resolves if the swap occurs successfully, rejects if there was an issue or table_staging wasn't found.
+
+---
+
+### importFileToTable(optsObject)
+This file will import a file to an existing table. It's most useful when loading RDS data, where you know the structure of the table and the file will match one another and the table can be copied for import.
+
+This function takes a table, makes a copy of it, loads all the file contents into it, and then swaps the copy with the live version of the table using `mysql.swapTables`.
+
+This uses MySQL's `LOAD DATA INFILE` command, [which is documented here](https://dev.mysql.com/doc/refman/5.7/en/load-data.html).
+
+**Parameters** (object)
+* `filepath` (string | required) - path to the file to load
+* `table` (string | optional) - name of the table to load the file into. Fallsback to the file name if not provided.
+* `headers` (array | optional) - If you only want to import certain fields from the file, you can pass the fields you want using this array.
+* `delimiter` (string | optional | default = `","`) - The delimiter of the file you're importing. Defaults to comma.
+* `quotes` (string | optional | default = `''`) - String enclosing each field of the file you're importing. Pass a single example of the character. For example, for quotes, pass `quotes: '"'`. Defaults to none.
+* `newline` (string | optional | default = `"\n"`) - Line terminator in your file. Defaults to `\n`.
+
+**Example**
+```javascript
+mysql.loadFileToTable({
+    filepath: './tmp/example.csv',
+    table: 'rds'
+    headers: ['customerid', 'session date', 'wishlist id'],
+    quotes: '"',
+})
+.then(function(rowsAffected){
+    // rowsAffected = count of records imported
+})
+```
+
+**Returns** (Promise | Int)
+Returns a promise containing the number of rows affected. This is the number of records imported.
 
 ---
 
