@@ -32,9 +32,9 @@ if(process.env.LOGGING_LEVEL === 'debug') mysql.setDebug(logger);
 ## Methods
 
 **Utilities and Table Management**
-* [getConnection](#getConnection)
+* [getConnection](#getconnection)
 * [query](#querycommand)
-* [tableExists](#tableExiststable)
+* [tableExists](#tableexiststable)
 * [getHeaders](#getheadersfilepath-delimiter)
 * [createStagingTable](#createstagingtabletable)
 * [createNewTable](#createnewtablename-headers-overwrite)
