@@ -42,6 +42,7 @@ if(process.env.LOGGING_LEVEL === 'debug') mysql.setDebug(logger);
 
 **File Functions**
 * [importFileToTable](#importfiletotableoptsobject)
+* [importFileAndCreateTable](importfileandcreatetableoptsobject)
 
 ---
 
@@ -221,11 +222,11 @@ Resolves if the swap occurs successfully, rejects if there was an issue or table
 ---
 
 ### importFileToTable(optsObject)
-This file will import a file to an existing table. It's most useful when loading RDS data, where you know the structure of the table and the file will match one another and the table can be copied for import.
+This method will import a file to an existing table. It's most useful when loading RDS data, where you know the structure of the table and the file will match one another and the table can be copied for import.
 
 This function takes a table, makes a copy of it, loads all the file contents into it, and then swaps the copy with the live version of the table using `mysql.swapTables`.
 
-This uses MySQL's `LOAD DATA INFILE` command, [which is documented here](https://dev.mysql.com/doc/refman/5.7/en/load-data.html).
+This uses the Class method [createStagingTable](#createstagingtabletable) and MySQL's `LOAD DATA INFILE` command, [which is documented here](https://dev.mysql.com/doc/refman/5.7/en/load-data.html).
 
 **Parameters** (object)
 * `filepath` (string | required) - path to the file to load
@@ -249,6 +250,55 @@ mysql.loadFileToTable({
 ```
 
 **Returns** (Promise | Int)
+
+Returns a promise containing the number of rows affected. This is the number of records imported.
+
+---
+
+### importFileAndCreateTable(optsObject)
+This method will create a new table and import a file into that table. It's most useful when you want to use a file to define a table, and quickly import it's data. This function is used by the merge method to import each file into a table before merging.
+
+This function can create a new table with headers you pass or by reading the headers in the file. It can also overwrite an existing table if one exists, but you must pass the `overwrite` option as True.
+
+If you're not going to use `overwrite` but plan to run this function on a recurring basis, make sure you drop the table after you're done with it so the next occurrence doesn't throw an error.
+
+This uses the Class Method [createNewTable](#createnewtablename-headers-overwrite) and MySQL's `LOAD DATA INFILE` command, [which is documented here](https://dev.mysql.com/doc/refman/5.7/en/load-data.html).
+
+**Parameters** (object)
+* `filepath` (string | required) - path to the file to load
+* `table` (string | optional) - name of the table to load the file into. Fallsback to the file name if not provided.
+* `overwrite` (bool | default = `false`) - If an existing table with the `table` name exists, overwrite it. Defaults to false, throwing an error if the table already exists.
+* `headers` (array | optional) - If you only want to import certain fields from the file, you can pass the fields you want using this array.
+* `delimiter` (string | optional | default = `","`) - The delimiter of the file you're importing. Defaults to comma.
+* `quotes` (string | optional | default = `''`) - String enclosing each field of the file you're importing. Pass a single example of the character. For example, for quotes, pass `quotes: '"'`. Defaults to none.
+* `newline` (string | optional | default = `"\n"`) - Line terminator in your file. Defaults to `\n`.
+
+**Example**
+```javascript
+mysql.importFileAndCreateTable({
+    filepath: './tmp/example.csv',
+    quotes: '"',
+})
+.then(function(rowsAffected){
+    // rowsAffected = count of records imported
+})
+
+/**
+ * Create a table with only 3 headers
+ * Only import the matching headers from the file
+ */
+mysql.importFileAndCreateTable({
+    filepath: './tmp/example.csv',
+    headers: ['contactId', 'firstname', 'lastname']
+    quotes: '"',
+})
+.then(function(rowsAffected){
+    // rowsAffected = count of records imported
+})
+```
+
+**Returns** (Promise | Int)
+
 Returns a promise containing the number of rows affected. This is the number of records imported.
 
 ---

@@ -107,17 +107,25 @@ describe('File Methods', function(){
         }).catch(done);
     });
     
-    // after(function(done){
-    //     mysql.query('DROP TABLE IF EXISTS data')
-    //     .then(function(){
-    //         done();
-    //     })
-    //     .catch(done);
-    // });
+    after(function(done){
+        mysql.query('DROP TABLE IF EXISTS data')
+        .then(function(){
+            return mysql.query('DROP TABLE IF EXISTS data2');
+        })
+        .then(function(){
+            done();
+        })
+        .catch(done);
+    });
     
     describe('Imports', function(){
         it('Imports File to an Existing Table', function(){
-            return mysql.importFileToTable({filepath: './test/data.csv', quotes: '"'}).should.eventually.equal(4)
-        })
+            return mysql.importFileToTable({filepath: './test/data.csv', quotes: '"'}).should.eventually.equal(4);
+        });
+        
+        it('Creates a New Table Using a File and Imports File', function(){
+            return mysql.importFileAndCreateTable({filepath: './test/data.csv', table: 'data2', headers: ['email', 'first'], quotes: '"'}).should.eventually.equal(4);
+        });
     });
+    
 });
