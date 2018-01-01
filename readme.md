@@ -173,11 +173,12 @@ A promise with the name of the new table - always the name of the table passed +
 
 ---
 
-### createNewTable(name, headers, overwrite)
+### createNewTable(name, headers, index overwrite)
 
 **Parameters**
 * `name` (string) - The name of the table to create
 * `headers` (array) - An array of the header names. All headers are automatically set to VARCHAR(10000).
+* `index` (string) - If you want to set an index on the table after it's created, pass the string of the header you want the index to be create for. If you want to use `overwrite` and not `index`, pass `null` for `index`.
 * `overwrite` (bool | Default `false`) - If an existing table already exists with the `name`, you can overwrite with by passing `true`.
 
 **Examples**
@@ -300,6 +301,40 @@ mysql.importFileAndCreateTable({
 **Returns** (Promise | Int)
 
 Returns a promise containing the number of rows affected. This is the number of records imported.
+
+---
+
+### exportFileFromTable(optsObject)
+This file will export all data from a table to a flat file. It's handy when you need to quickly extract data out of MySQL into a csv or other delimited file.
+
+It uses the same options object as the file import methods, but the options are defining what the output file should look like.
+
+*NOTE* - You'll need to pass `__dirname` at the start of your `filepath` to be extra specific as to where the file should be exported to. Since MySQL is running this command, you must tell it that you want the file on your server, not on the MySQL server.
+
+This uses MySQL's `SELECT INTO OUTFILE` command, [which is documented here](https://dev.mysql.com/doc/refman/5.7/en/select-into.html).
+
+**Parameters** (object)
+* `filepath` (string | required) - path to where the file should export. You should pass `__dirname` at the start of your `filepath`.
+* `table` (string | optional) - name of the table to export the dadta from. Fallsback to the file name if not provided.
+* `headers` (array | optional) - If you only want to export certain fields from the table, you can pass the fields you want using this array.
+* `delimiter` (string | optional | default = `","`) - The delimiter you want in your output file. Defaults to comma.
+* `quotes` (string | optional | default = `''`) - Optionally wrap each field value in quotes in the output file. Pass a single example of the character. For example, for quotes, pass `quotes: '"'`. Defaults to none.
+* `newline` (string | optional | default = `"\n"`) - Line terminator in your file. Defaults to `\n`.
+
+**Example**
+```javascript
+mysql.importFileAndCreateTable({
+    filepath: './tmp/example.csv',
+    quotes: '"',
+})
+.then(function(rowsAffected){
+    // rowsAffected = count of records exported
+})
+```
+
+**Returns** (Promise | Int)
+
+Returns a promise containing the number of rows affected. This is the number of records exported.
 
 ---
 

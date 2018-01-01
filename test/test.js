@@ -3,7 +3,8 @@
 
 const mocha = require('mocha'),
       chai = require('chai'),
-      chaiAsPromised = require("chai-as-promised");
+      chaiAsPromised = require("chai-as-promised"),
+      fs = require('fs'),
       MySQL = require('../index.js');
        
 chai.use(chaiAsPromised);
@@ -70,7 +71,7 @@ describe('Table Methods', function(){
         });
         
         it('Overwrites an Existing table and Creates a New One', function(){
-            return mysql.createNewTable('test2', ['email', 'first', 'last'], true).should.eventually.equal('test2');
+            return mysql.createNewTable('test2', ['email', 'first', 'last'], null, true).should.eventually.equal('test2');
         });
         
         it('Reject When Trying to Create a Staging Table from a Non-Exsting Table', function(){
@@ -103,6 +104,12 @@ describe('File Methods', function(){
     before(function(done){
         mysql.query('CREATE TABLE IF NOT EXISTS data (email VARCHAR(255), first VARCHAR(255), last VARCHAR(255))')
         .then(function(){
+            return mysql.query('DROP TABLE IF EXISTS datamerge1');
+        })
+        .then(function(){
+            return mysql.query('DROP TABLE IF EXISTS datamerge2');
+        })
+        .then(function(){
             done();
         }).catch(done);
     });
@@ -112,10 +119,20 @@ describe('File Methods', function(){
         .then(function(){
             return mysql.query('DROP TABLE IF EXISTS data2');
         })
+        // .then(function(){
+        //     return mysql.query('DROP TABLE IF EXISTS datamerge1');
+        // })
+        // .then(function(){
+        //     return mysql.query('DROP TABLE IF EXISTS datamerge2');
+        // })
         .then(function(){
-            done();
-        })
-        .catch(done);
+            return new Promise(function(resolve,reject){
+                fs.unlink('./test/export.csv', function(err){
+                    if(err) return reject();
+                    resolve();
+                });
+            });
+        }).then(function(){ done();}).catch(done);
     });
     
     describe('Imports', function(){
@@ -125,6 +142,17 @@ describe('File Methods', function(){
         
         it('Creates a New Table Using a File and Imports File', function(){
             return mysql.importFileAndCreateTable({filepath: './test/data.csv', table: 'data2', headers: ['email', 'first'], quotes: '"'}).should.eventually.equal(4);
+        });
+    });
+    
+    describe('Exports', function(){
+        it('Exports a table to a file', function(done){
+            mysql.exportFileFromTable({filepath: __dirname + '/export.csv', table: 'data2'})
+            .then(function(results){
+                results.should.equal(4);
+                fs.existsSync(__dirname + '/export.csv').should.equal(true);
+                done();
+            }).catch(done);
         });
     });
     
