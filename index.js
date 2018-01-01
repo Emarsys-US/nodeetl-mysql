@@ -356,5 +356,66 @@ module.exports = class MySQL {
             })
             .catch(reject);
         });
-    }    
+    }
+    
+    mergeFiles(files, output = './tmp/merged.csv') {
+        const self = this;
+        if(self.debug) self.log(`Starting merge of ${_.size(files)} files`);
+        
+        return new Promise(function(resolve,reject){
+            if(!files || !_.isArray(files) || !files.length) return reject("MySQL Class // MergeFiles - The 'files' parameter (1) is missing, or misformatted. Must be an array of objects");
+            let tables = [];
+            
+            // Check file properties
+            // Create tables array
+            _.each(files,function(file){
+                if(!file.filepath) return reject("MySQL Class / mergeFiles Method - The file" + file.toString() + "is missing the 'path' property");
+                if(!file.index) return reject("MySQL Class / mergeFiles Method - The file" + file.toString() + "is missing the 'index' property");
+                if(!file.headers || !file.headers.length) file.headers = [];
+                if(!file.delimiter) file.delimiter = ",";
+                if(!file.table) file.table = path.parse(file).name;
+                
+                tables.push({key: file.index, name : file.table});
+            });
+            
+            let importFiles = function(){
+                return new Promise(function(resolve,reject){
+                    async.each(files, function(file, next){
+                        self.importFileAndCreateTable(file)
+                        .then(function(name){
+                            next();
+                        }).catch(next);
+                    }, function(err){
+                        if(err) return reject(err);
+                        if(self.debug) self.log(`Imported all files into tables`);
+                        resolve();
+                    });
+                });
+            };
+            
+            let joinIntoTable = function() {
+                let mergeTable = 'merge_' + Math.random().toString(36).substring(7);
+                let firstTable = tables.shift(),
+                    join = `CREATE TABLE ${mergeTable} SELECT * FROM ${firstTable.name}`;
+                
+                _.each(tables, function(table){
+                    join += ` FULL JOIN ${table.name} ON ${table.name}.${table.key}=${firstTable.name}.${firstTable.key}`;
+                });
+                
+                
+                self.query(join)
+                .then(function(){
+                    if(self.debug) self.log(`Merged tables into new table ${mergeTable}`);
+                    resolve(mergeTable);
+                }).catch(reject);
+            };
+            
+            importFiles()
+            // .then(createMergeTable)
+            .then(joinIntoTable)
+            .then(resolve)
+            .catch(reject);
+        });
+    }
+    
 };

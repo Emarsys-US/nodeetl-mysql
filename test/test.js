@@ -15,6 +15,7 @@ const mysql = new MySQL({
   user     : 'root',
   database : 'nodeetl-mysql'
 });
+mysql.setDebug();
 
 
 describe('Table Methods', function(){
@@ -151,6 +152,29 @@ describe('File Methods', function(){
             .then(function(results){
                 results.should.equal(4);
                 fs.existsSync(__dirname + '/export.csv').should.equal(true);
+                done();
+            }).catch(done);
+        });
+    });
+    
+    describe('Merging', function(){
+        it('Merges Multiple Files into a Single File', function(done){
+            let files = [
+                {
+                    filepath: './test/data.csv',
+                    table: 'datamerge1',
+                    index: 'email'
+                },
+                {
+                    filepath: './test/data2.csv',
+                    table: 'datamerge2',
+                    index: 'email',
+                }
+            ];
+            
+            mysql.mergeFiles(files, __dirname + 'merged.csv')
+            .then(function(){
+                fs.existsSync(__dirname + '/merged.csv').should.equal(true);
                 done();
             }).catch(done);
         });
