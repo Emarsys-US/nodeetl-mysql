@@ -423,7 +423,7 @@ This method will take flat files and merge the columns together. You pass a merg
 Will output a final output file.
 
 **Parameters** (object)
-* `files` (array | required) - Collection of objects describing input Files
+* `files` (array of objects | required) - Collection of objects describing input Files
     * `filepath` (string | required) - path to the file to load
     * `table` (string | optional) - name of the table to load the file into. Fallsback to the file name if not provided.
     * `overwrite` (bool | default = `false`) - If an existing table with the `table` name exists, overwrite it. Defaults to false, throwing an error if the table already exists.

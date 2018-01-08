@@ -250,7 +250,6 @@ module.exports = class MySQL {
                     self.query(`CREATE TABLE ${table} (${headerString})`)
                     .then(function(results){
                         if(!index) return;
-                        console.log('CREATE TABLE INDEX', table, index);
                         return self.addIndex(table,index);
                     })
                     .then(function(results){
@@ -394,7 +393,6 @@ module.exports = class MySQL {
             })
             .then(function(headers){
                 if(self.debug) self.log(`About to create new table ${table}`);
-                console.log('About to create table', table, index, headers);
                 return self.createNewTable({filepath: filepath, table: table, overwrite: overwrite, index:index, headers:headers, prependHeaders:prependHeaders});
             })
             .then(function(){
