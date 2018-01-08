@@ -33,7 +33,7 @@ if(process.env.LOGGING_LEVEL === 'debug') mysql.setDebug(logger);
 
 **SQL Functions**
 * [getConnection](#getconnection)
-* [query](#querycommand)
+* [query](#querycommand-variables)
 
 **Table Functions**
 * [tableExists](#tableexiststable)
@@ -45,11 +45,11 @@ if(process.env.LOGGING_LEVEL === 'debug') mysql.setDebug(logger);
 * [dropTable](#droptabletable)
 
 **File Functions**
-* [getFileHeaders](#getFileheadersfilepath-delimiter)
+* [getFileHeaders](#getfileheadersfilepath-delimiter)
 * [importFileToTable](#importfiletotableoptsobject)
-* [importFileAndCreateTable](importfileandcreatetableoptsobject)
-* [exportFileFromTable](exportfilefromtableoptsobject)
-* [mergeFiles](mergefilesfilesmergeoutput)
+* [importFileAndCreateTable](#importfileandcreatetableoptsobject)
+* [exportFileFromTable](#exportfilefromtableoptsobject)
+* [mergeFiles](#mergefilesfilesmergeoutput)
 
 ---
 
