@@ -478,4 +478,5 @@ $ npm test
 ```
 
 ## Changelog
+v1.0.0 - Complete methods and documentation
 v0.0.1 - Utility functions, tests, and readme
