@@ -31,6 +31,20 @@ module.exports = class MySQL {
         if(winston) this.log = winston.debug;
     }
     
+    /** 
+     * Returns TRUE if the first specified array contains all elements
+     * from the second one. FALSE otherwise.
+     * Stolen from: https://github.com/lodash/lodash/issues/1743
+     * @param {array} superset
+     * @param {array} subset
+     * @returns {boolean}
+    */
+    arrayContainsArray (superset, subset) {
+        return subset.every(function (value) {
+            return (superset.indexOf(value) >= 0);
+        });
+    }
+    
     /**
      * getConnection
      * Calls the pool to create a sql connection
@@ -51,12 +65,13 @@ module.exports = class MySQL {
      * @param  {string} command SQL command
      * @return {promise}        Returns the result of the sql command in a promise
      */
-    query(command) {
+    query(command, ...variables) {
         const self = this;
         return new Promise(function(resolve,reject){
             self.getConnection()
             .then(function(db){
-                db.query(command,function(err,response){
+                let sql = db.format(command, [...variables]);
+                db.query(sql, function(err,response){
                     if(err && self.debug) self.log(err);
                     if(err) return reject(err);
                     db.release();
@@ -85,19 +100,86 @@ module.exports = class MySQL {
     }
     
     /**
-     * getHeaders
+     * dropTable
+     * Drop table or tables
+     * @param  {string | array} table Name of table or tables to drop
+     * @return {Promise}              Promise resolves if successful
+     */
+    dropTable(table){
+        const self = this;
+        return new Promise(function(resolve,reject){
+            if(!table || !table.length) return reject(new Error("MySQL Class / dropTable Method - Missing Table Parameter. Must be a string or array"));
+            let tables = _.concat([],table);
+            async.each(tables,function(table,next){
+                self.query(`DROP TABLE IF EXISTS ${table}`)
+                .then(function(){
+                    next();
+                }).catch(next);
+            },function(err){
+                if(err) return reject(err);
+                resolve();
+            });
+        });
+    }
+    
+    /**
+     * addIndex
+     * @param {string} table Name of table to add index to
+     * @param {string | array} index Field(s) to index
+     */
+    addIndex(table,index) {
+        const self = this;
+        
+        return new Promise(function(resolve,reject){
+            if(!table) return reject(new Error("MySQL Class / addIndex Method - Missing Table Parameter. Must be a string of table you want to add index(es) to."));
+            if(!index) return reject(new Error("MySQL Class / addIndex Method - Missing Index Parameter. Must be a string or array of headers you want to create index(es) for in the table."));
+            
+            async.each(_.concat([],index),function(ind,next) {
+                self.query(`CREATE INDEX ${ind} on ${table} (${ind}) USING BTREE`)
+                .then(function(){
+                    next();
+                }).catch(next);
+            },function(err){
+                if(err) return reject(err);
+                resolve();
+            });
+        });
+    }
+    
+    
+    /**
+     * getFileHeaders
      * @param  {string} filepath  path and name of the file
      * @param  {string} delimiter delimiter for parsing each file
      * @return {array}            each of the headers in an array
      */
-    getHeaders(filepath, delimiter=",") {
+    getFileHeaders(filepath, delimiter=",") {
         const self = this;
         return new Promise(function(resolve,reject){
-            if(!filepath) return reject(new Error("MySQL Class / getHeaders Method - Missing filepath parameter"));
+            if(!filepath) return reject(new Error("MySQL Class / getFileHeaders Method - Missing filepath parameter"));
             firstline(filepath)
             .then(function(line){
                 if(self.debug) self.log(`Finding Headers using delimiter: "${delimiter}". Headers found:`, line.split(delimiter));
                 resolve(line.split(delimiter));
+            }).catch(reject);
+        });
+    }
+    
+    /**
+     * getTableHeaders
+     * @param  {string} table    Name of table
+     * @return {Promsie | array} List of fields in the table
+     */
+    getTableHeaders(table) {
+        const self = this;
+        return new Promise(function(resolve,reject){
+            self.query(`SELECT GROUP_CONCAT(CONCAT("'",COLUMN_NAME,"'")) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${table}' ORDER BY ORDINAL_POSITION;`)
+            .then(function(response){
+                let string = response[0]['GROUP_CONCAT(CONCAT("\'",COLUMN_NAME,"\'"))'];
+                let headers = string.split(',').map(function(header){
+                    return _.trim(header, "'");
+                });
+                resolve(headers);
             }).catch(reject);
         });
     }
@@ -140,33 +222,40 @@ module.exports = class MySQL {
     
     /**
      * createNewTable
-     * @param  {string} name    Name of table to be creatws
+     * @param  {string} table   Name of table to be creatws
      * @param  {array}  headers List of header names
+     * @param  {array}  index   Which headers should be indexed
+     * @param  {bool}   prependHeaders If headers should have the table name prepended
      * @param  {bool}   overwrite Overwrite if an existing table is found
      * @return {string}         Name of new table
      */
-    createNewTable(name, headers, index = null, overwrite=false) {
+    createNewTable({table, headers, index = null, prependHeaders = false, overwrite=false}) {
         const self = this;
         
         return new Promise(function(resolve,reject){
-            if(!name) return reject(new Error("MySQL Class / createNewTable Method - Must provide a name for the new table"));
+            if(!table) return reject(new Error("MySQL Class / createNewTable Method - Must provide a name for the new table"));
             if(!headers && !_.isArray(headers) && !headers.length) return reject(new Error('MySQL Class / createNewTable Method - No headers provided to create new table or not passed as an array'));
-            if(index && _.indexOf(headers, index) === -1) return reject(new Error('MySQL Class / createNewTable Method - Cannot create table. Index must be included in the headers array to avoid an error.'));
-            let headerString = headers.map(function(header){ return header + ' VARCHAR(1000)';}).join(', ');
+            if(index && self.arrayContainsArray(_.concat([],index), headers)) return reject(new Error('MySQL Class / createNewTable Method - Cannot create table. Index must be included in the headers array to avoid an error.'));
+            if(prependHeaders && index) index = _.map(_.concat([],index),function(ind){ return table + "_" + _.camelCase(ind);});
             
-            if(self.debug) self.log(`Creating new table called ${name}. Headers string for CREATE command: ${headerString}`);
+            let headerString = headers.map(function(header){
+                if(prependHeaders) header = table + '_' + _.camelCase(header);
+                return header + ' VARCHAR(1000)';
+            }).join(', ');
+            
+            if(self.debug) self.log(`Creating new table called ${table}. Headers string for CREATE command: ${headerString}`);
             
             let create = function() {
                 return new Promise(function(resolve,reject){
-                    self.query(`CREATE TABLE ${name} (${headerString})`)
+                    self.query(`CREATE TABLE ${table} (${headerString})`)
                     .then(function(results){
-                        if(self.debug) self.log(`${name} successfully created`);
-                        if(!index) return resolve(name);
-                        return self.query(`CREATE INDEX ${index} on ${name} (${index}) USING BTREE`);
+                        if(!index) return;
+                        console.log('CREATE TABLE INDEX', table, index);
+                        return self.addIndex(table,index);
                     })
                     .then(function(results){
-                        if(self.debug) self.log(`Index ${index} on ${name} successfully created`);
-                        resolve(name);
+                        if(self.debug) self.log(`Index ${index} on ${table} successfully created`);
+                        resolve(table);
                     }).catch(function(err){
                         if(err) return reject(new Error('Error creating new table in MySQL Class' + err));
                     });
@@ -175,21 +264,21 @@ module.exports = class MySQL {
             
             let drop = function() {
                 return new Promise(function(resolve,reject){
-                    if(self.debug) self.log(`${name} already exists, checking for overwrite param`);
-                    if(!overwrite) return reject(new Error('Error creating new table. One already exists with the name provided and overwrite parameter was not set to TRUE'));
-                    if(self.debug) self.log(`Overwritng ${name} with new table definition`);
-                    self.query(`DROP TABLE IF EXISTS ${name}`)
+                    if(self.debug) self.log(`${table} already exists, checking for overwrite param`);
+                    if(!overwrite) return reject(new Error('Error creating new table. One already exists with the table provided and overwrite parameter was not set to TRUE'));
+                    if(self.debug) self.log(`Overwritng ${table} with new table definition`);
+                    self.query(`DROP TABLE IF EXISTS ${table}`)
                     .then(create)
                     .then(resolve)
                     .catch(reject);
                 });
             };
             
-            self.tableExists(name)
+            self.tableExists(table)
             .then(drop, create)
             .then(resolve)
             .catch(function(err){
-                reject(new Error('MySQL Class / createNewTable Method - Error creating new table in MySQL Class Method createNewTable()' + err));
+                reject(new Error('MySQL Class / createNewTable Method - Error creating new table in because: ' + err));
             });
             
         });
@@ -263,7 +352,7 @@ module.exports = class MySQL {
                 reject(new Error(`No matching table found for ${table}`));
             })
             .then(function(){
-                return self.query(`LOAD DATA LOCAL INFILE '${filepath}' INTO TABLE ${table}_staging FIELDS TERMINATED BY '${delimiter}' ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}' (${headers.join(', ')})`);
+                return self.query(`LOAD DATA LOCAL INFILE '${filepath}' INTO TABLE ${table}_staging FIELDS TERMINATED BY '${delimiter}' ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}' IGNORE 1 LINES (${headers.join(', ')})`);
             })
             .then(function(results){
                 return new Promise(function(resolve,reject){
@@ -291,7 +380,7 @@ module.exports = class MySQL {
      * @param  {String} [newline="\n"]  Character terminating lines of a each line in the file
      * @return {promsie}                resovles promsie with number of rows imported
      */
-    importFileAndCreateTable({filepath, table = "", overwrite = false, index = null, headers = [], delimiter = ",", quotes = '', newline = "\n"}) {
+    importFileAndCreateTable({filepath, table = "", overwrite = false, index = null, headers = [], prependHeaders = false, delimiter = ",", quotes = '', newline = "\n"}) {
         const self = this;
         
         return new Promise(function(resolve,reject){
@@ -301,15 +390,16 @@ module.exports = class MySQL {
             
             new Promise(function(resolve, reject){
                 if(headers.length) return resolve(headers);
-                self.getHeaders(filepath, delimiter).then(resolve).catch(reject);
+                self.getFileHeaders(filepath, delimiter).then(resolve).catch(reject);
             })
             .then(function(headers){
                 if(self.debug) self.log(`About to create new table ${table}`);
-                return self.createNewTable(table, headers, index, overwrite);
+                console.log('About to create table', table, index, headers);
+                return self.createNewTable({filepath: filepath, table: table, overwrite: overwrite, index:index, headers:headers, prependHeaders:prependHeaders});
             })
             .then(function(){
                 if(self.debug) self.log(`About to load data from ${filepath} into ${table}`);
-                return self.query(`LOAD DATA LOCAL INFILE '${filepath}' INTO TABLE ${table} FIELDS TERMINATED BY '${delimiter}' ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}' (${headers.join(', ')})`);
+                return self.query(`LOAD DATA LOCAL INFILE '${filepath}' INTO TABLE ${table} FIELDS TERMINATED BY '${delimiter}' ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}' IGNORE 1 LINES ${headers? '('+ headers.join(', ') +')' : ''}`);
             })
             .then(function(results){
                 if(self.debug) self.log(`Loaded file, ${results.affectedRows} rows affected`);
@@ -349,7 +439,15 @@ module.exports = class MySQL {
                 reject(new Error(`exportFile - No matching table found for ${table}`));
             })
             .then(function(){
-                return self.query(`SELECT ${headers.length ? headers.join(', ') : '*'} INTO OUTFILE '${filepath}' FIELDS TERMINATED BY '${delimiter}' OPTIONALLY ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}' FROM ${table}`);
+                if(headers.length) return headers;
+                return self.getTableHeaders(table);
+            })
+            .then(function(headers) {
+                // Needs to copy headers here to include them in the CSV export (rolling eyes emoji)
+                let sql = `SELECT ${headers.map(function(header){ return '\"' + header + '\"'; }).join(', ')}`;
+                sql += ` UNION ALL`;
+                sql += ` SELECT ?? FROM ${table} INTO OUTFILE '${filepath}' FIELDS TERMINATED BY '${delimiter}' OPTIONALLY ENCLOSED BY '${quotes}' LINES TERMINATED BY '${newline}'`;
+                return self.query(sql, headers);
             })
             .then(function(results){
                 resolve(results.affectedRows);
@@ -358,13 +456,23 @@ module.exports = class MySQL {
         });
     }
     
-    mergeFiles(files, output = './tmp/merged.csv') {
+    /**
+     * Merge Multiple Files Together
+     * @param  {array}  files  Collection of file objects that describe the files being imported. Same as importFileAndCreateTable.
+     * @param  {object} merge  Object describing how tables map together {"table.field": "othertable".field}
+     * @param  {String} output Output location of the final file
+     * @return {Promise}       Resolved promised when done with number of rows exported
+     */
+    mergeFiles(files, merge, output) {
         const self = this;
         if(self.debug) self.log(`Starting merge of ${_.size(files)} files`);
         
         return new Promise(function(resolve,reject){
             if(!files || !_.isArray(files) || !files.length) return reject("MySQL Class // MergeFiles - The 'files' parameter (1) is missing, or misformatted. Must be an array of objects");
-            let tables = [];
+            if(!merge) return reject("MySQL Class // MergeFiles - The 'merge' parameter (2) is missing, or misformatted. Must be an object");
+            if(!output) return reject("MySQL Class // MergeFiles - The 'output' parameter (3) is missing, or misformatted. Must be a string");
+            let tables = [],
+                mergeTable = null;
             
             // Check file properties
             // Create tables array
@@ -374,10 +482,13 @@ module.exports = class MySQL {
                 if(!file.headers || !file.headers.length) file.headers = [];
                 if(!file.delimiter) file.delimiter = ",";
                 if(!file.table) file.table = path.parse(file).name;
+                file.prependHeaders = true;
                 
-                tables.push({key: file.index, name : file.table});
+                tables.push(file.table);
             });
             
+            // Import each file into its own table.
+            // Prepend table headers with the table name so no conflicts arise
             let importFiles = function(){
                 return new Promise(function(resolve,reject){
                     async.each(files, function(file, next){
@@ -393,26 +504,50 @@ module.exports = class MySQL {
                 });
             };
             
+            // Create merge statement looping over merge object to map tables together
             let joinIntoTable = function() {
-                let mergeTable = 'merge_' + Math.random().toString(36).substring(7);
-                let firstTable = tables.shift(),
-                    join = `CREATE TABLE ${mergeTable} SELECT * FROM ${firstTable.name}`;
-                
-                _.each(tables, function(table){
-                    join += ` FULL JOIN ${table.name} ON ${table.name}.${table.key}=${firstTable.name}.${firstTable.key}`;
+                return new Promise(function(resolve,reject){
+                    let merges = _.toPairs(merge);
+                    mergeTable = 'merge_' + Math.random().toString(36).substring(7);
+                    
+                    let join = `CREATE TABLE ${mergeTable} SELECT * FROM ${tables.join(', ')}`;
+                    
+                    _.each(merges, function(merge, i){
+                        join += (i === 0) ? ' WHERE' : ' AND';
+                        join += ` ${merge[0]} = ${merge[1]}`;
+                    });
+                    
+                    if(self.debug) self.log(`Merge statement built: ${join}`);
+                    
+                    self.query(join)
+                    .then(function(){
+                        if(self.debug) self.log(`Merged tables into new table ${mergeTable}`);
+                        resolve();
+                    }).catch(reject);
                 });
-                
-                
-                self.query(join)
-                .then(function(){
-                    if(self.debug) self.log(`Merged tables into new table ${mergeTable}`);
-                    resolve(mergeTable);
-                }).catch(reject);
             };
             
+            // Export the merge table to a file
+            let exportToFile = function() {
+                return self.exportFileFromTable({filepath: output, table: mergeTable});
+            };
+            
+            // Drop all tables needed for merge
+            let dropMergeTables = function(rowsExported) {
+                return new Promise(function(resolve,reject){
+                    if(self.debug) self.log(`Dropping file tables ${tables} and the merge table ${mergeTable}`);
+                    self.dropTable(_.concat(mergeTable,tables))
+                    .then(function(){
+                        resolve(rowsExported);
+                    }).catch(reject);
+                });
+            };
+            
+            // Merge Files Flow
             importFiles()
-            // .then(createMergeTable)
             .then(joinIntoTable)
+            .then(exportToFile)
+            .then(dropMergeTables)
             .then(resolve)
             .catch(reject);
         });

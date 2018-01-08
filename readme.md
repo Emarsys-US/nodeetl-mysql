@@ -31,18 +31,25 @@ if(process.env.LOGGING_LEVEL === 'debug') mysql.setDebug(logger);
 
 ## Methods
 
-**Utilities and Table Management**
+**SQL Functions**
 * [getConnection](#getconnection)
 * [query](#querycommand)
+
+**Table Functions**
 * [tableExists](#tableexiststable)
-* [getHeaders](#getheadersfilepath-delimiter)
 * [createStagingTable](#createstagingtabletable)
-* [createNewTable](#createnewtablename-headers-overwrite)
+* [createNewTable](#createnewtableoptsobject)
+* [getTableHeaders](#gettableheaderstable)
+* [addIndex](#addindextableindex)
 * [swapTables](#swaptablestable)
+* [dropTable](#droptabletable)
 
 **File Functions**
+* [getFileHeaders](#getFileheadersfilepath-delimiter)
 * [importFileToTable](#importfiletotableoptsobject)
 * [importFileAndCreateTable](importfileandcreatetableoptsobject)
+* [exportFileFromTable](exportfilefromtableoptsobject)
+* [mergeFiles](mergefilesfilesmergeoutput)
 
 ---
 
@@ -65,11 +72,12 @@ A promise with the `connection` from the pool. You can release the connection ba
 
 ---
 
-### query(command)
+### query(command, ...variables)
 You can run a query through the `mysql` instance. This will automatically acquire a connection from the pool, run the command and release the connection for you. Any valid query can be used.
 
 **Parameters**
 * `command` (string) - The sql command to run
+* `...variables` - Loose list of variables to pass into the sequal query. They replace any `?` or `??` in your `command` parameter. See [node mysql docs for more](https://github.com/mysqljs/mysql#escaping-query-values).
 
 **Example**
 ```javascript
@@ -123,35 +131,6 @@ A promise - resolving if table is found, rejecting if table is not found.
 
 ---
 
-### getHeaders(filepath, delimiter)
-This is a utility for getting the headers of a text file
-
-**Parameters**
-* `filepath` (string) - Location of the file
-* `delimiter` (optional | default "," | string) - Delimiter separating the fields. 
-
-**Examples**
-```javascript
-mysql.getHeaders('./tmp/myfile.csv ')
-.then(function(headers){
-    // headers array
-})
-
-/**
- * Or you can pass a delimiter for non CSV files
- */
-mysql.getHeaders('./tmp/myfile.tsv', '\t')
-.then(function(headers){
-    // headers array
-})
-```
-
-**Returns** (Promise Array)
-
-A Promise passing an `Array` of the headers from the file.
-
----
-
 ### createStagingTable('table')
 This is mostly an internal method used by the class when importing files. But you can use it to create a staging copy of an existing table.
 
@@ -173,17 +152,18 @@ A promise with the name of the new table - always the name of the table passed +
 
 ---
 
-### createNewTable(name, headers, index overwrite)
+### createNewTable(optsObject)
 
-**Parameters**
-* `name` (string) - The name of the table to create
+**Parameters** (Object)
+* `table` (string) - The name of the table to create
 * `headers` (array) - An array of the header names. All headers are automatically set to VARCHAR(10000).
 * `index` (string) - If you want to set an index on the table after it's created, pass the string of the header you want the index to be create for. If you want to use `overwrite` and not `index`, pass `null` for `index`.
+* `prependHeaders` (bool | Default `false`) - If the table name should be prepended to each field. Useful for merging tables together.
 * `overwrite` (bool | Default `false`) - If an existing table already exists with the `name`, you can overwrite with by passing `true`.
 
 **Examples**
 ```javascript
-mysql.createNewTable('newTable', ['email', 'first', 'last'])
+mysql.createNewTable({table: 'newTable', headers: ['email', 'first', 'last']})
 .then(function(newTable){
     // returns the name of the new table if successful
 })
@@ -192,6 +172,53 @@ mysql.createNewTable('newTable', ['email', 'first', 'last'])
 **Returns** (Promise | string)
 
 Returns a promise containing the name of the new table created
+
+---
+
+### addIndex(table,index)
+You can index a field or fields in a table using this method. It accepts one or more fields and indexes them on the table.
+
+**Parameters**
+* `table` (string | required) - name of table to add index to.
+* `index` (string or array | required) - Name of field or fields to index on the table.
+
+**Examples**
+```javascript
+mysql.addIndex('test', ['email', 'customerid'])
+.then(function(){
+    // Indexes added
+})
+.catch(function(err){
+    // Error adding indexes
+});
+```
+
+**Returns** (Promise)
+
+A promise - resolving if indexes are successfully created, rejecting if error occurs.
+
+---
+
+### getTableHeaders(table)
+Retrieve the fields on an existing table.
+
+**Parameters**
+* `table` (sting) - name of table to look for
+
+**Examples**
+```javascript
+mysql.tableExists('test')
+.then(function(fields){
+    // array of fields
+})
+.catch(function(err){
+    // error
+})
+```
+
+**Returns** (Promise | Array)
+
+A promise - resolving with an array of fields, rejecting if error.
 
 ---
 
@@ -219,6 +246,58 @@ mysql.swaptables('table')
 **Returns** (Promise)
 
 Resolves if the swap occurs successfully, rejects if there was an issue or table_staging wasn't found.
+
+---
+
+### dropTable(table)
+You can check if a table exists by passing it's name to this method.
+
+**Parameters**
+* `table` (sting | array) - name of table(s) to look for. Can pass a single table as a string, or multipel tables as an array.
+
+**Examples**
+```javascript
+mysql.dropTable('test')
+.then(function(){
+    // Table dropped
+})
+.catch(function(){
+    // Error dropping table
+});
+```
+
+**Returns** (Promise)
+
+A promise - resolving if table is or tables are dropped, rejecting if error occurs.
+
+---
+
+### getFileHeaders(filepath, delimiter)
+This is a utility for getting the headers of a text file
+
+**Parameters**
+* `filepath` (string) - Location of the file
+* `delimiter` (optional | default "," | string) - Delimiter separating the fields. 
+
+**Examples**
+```javascript
+mysql.getHeaders('./tmp/myfile.csv ')
+.then(function(headers){
+    // headers array
+})
+
+/**
+ * Or you can pass a delimiter for non CSV files
+ */
+mysql.getHeaders('./tmp/myfile.tsv', '\t')
+.then(function(headers){
+    // headers array
+})
+```
+
+**Returns** (Promise Array)
+
+A Promise passing an `Array` of the headers from the file.
 
 ---
 
@@ -323,8 +402,8 @@ This uses MySQL's `SELECT INTO OUTFILE` command, [which is documented here](http
 
 **Example**
 ```javascript
-mysql.importFileAndCreateTable({
-    filepath: './tmp/example.csv',
+mysql.exportFileFromTable({
+    filepath: __dirname + '/tmp/example.csv',
     quotes: '"',
 })
 .then(function(rowsAffected){
@@ -335,6 +414,56 @@ mysql.importFileAndCreateTable({
 **Returns** (Promise | Int)
 
 Returns a promise containing the number of rows affected. This is the number of records exported.
+
+---
+
+### mergeFiles(files,merge,output)
+This method will take flat files and merge the columns together. You pass a merge object to describe how the tables link to one another and it matches records based on that definition.
+
+Will output a final output file.
+
+**Parameters** (object)
+* `files` (array | required) - Collection of objects describing input Files
+    * `filepath` (string | required) - path to the file to load
+    * `table` (string | optional) - name of the table to load the file into. Fallsback to the file name if not provided.
+    * `overwrite` (bool | default = `false`) - If an existing table with the `table` name exists, overwrite it. Defaults to false, throwing an error if the table already exists.
+    * `headers` (array | optional) - If you only want to import certain fields from the file, you can pass the fields you want using this array.
+    * `index` (array | string | required) - Provide the header that should be indexed - this is the field that will be used to join to other files / tables. This makes joining faster. 
+    * `delimiter` (string | optional | default = `","`) - The delimiter of the file you're importing. Defaults to comma.
+    * `quotes` (string | optional | default = `''`) - String enclosing each field of the file you're importing. Pass a single example of the character. For example, for quotes, pass `quotes: '"'`. Defaults to none.
+    * `newline` (string | optional | default = `"\n"`) - Line terminator in your file. Defaults to `\n`.
+* `merge` (object | required) - Object describing how files map Together
+    * `table1.table1_field: table2.table2_field` - key should be a table and it's index field. Value should be another table and it's indexed field. Do this for each file. Please note, you'll need to reference **table**. The fields will also be prepended with the table name.
+* `output` (string | require) - Filepath to where the file should save. Just like with exportFileFromTable you'll need to be very specific where this file should go.
+
+**Example**
+```javascript
+let files = {
+    filepath: './test/data.csv',
+    table: 'datamerge1',
+    index: 'email',
+    quotes: '"'
+},
+{
+    filepath: './test/data2.csv',
+    table: 'datamerge2',
+    index: 'email',
+    quotes: '"',
+};
+
+let merge = {
+    'datamerge1.datamerge1_email': 'datamerge2.datamerge2_email'
+};
+
+mysql.mergeFiles(files, merge, __dirname + '/tmp/example.csv')
+.then(function(rowsAffected){
+    // rowsAffected = count of records exported
+})
+```
+
+**Returns** (Promise | Int)
+
+Returns a promise containing the number of rows affected. This is the number of records exported. Will also export file to disk at output location.
 
 ---
 

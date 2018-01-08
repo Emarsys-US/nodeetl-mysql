@@ -1,5 +1,5 @@
-email,alliance
-"poedameron@rebels.com","Resistance"
-"rey@jedi.com","Resistance"
-"kyloren@firstorder.com","First Order"
-"hansolo@solosmuggling.com","Smuggler"
+email,alliance,allianceid
+"poedameron@rebels.com","Resistance","r123"
+"rey@jedi.com","Resistance","r456"
+"kyloren@firstorder.com","First Order","fo123"
+"hansolo@solosmuggling.com","Smuggler","s123"

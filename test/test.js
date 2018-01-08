@@ -58,7 +58,7 @@ describe('Table Methods', function(){
         });
         
         it('Gets Headers from File', function(){
-            return mysql.getHeaders('./test/data.csv').should.eventually.deep.equal(['email', 'first', 'last']);
+            return mysql.getFileHeaders('./test/data.csv').should.eventually.deep.equal(['email', 'first', 'last']);
         });
     });
     
@@ -68,11 +68,11 @@ describe('Table Methods', function(){
         });
         
         it('Creates a New Table from Headers', function(){
-            return mysql.createNewTable('test2', ['email', 'first', 'last']).should.eventually.equal('test2');
+            return mysql.createNewTable({table:'test2', headers:['email', 'first', 'last']}).should.eventually.equal('test2');
         });
         
         it('Overwrites an Existing table and Creates a New One', function(){
-            return mysql.createNewTable('test2', ['email', 'first', 'last'], null, true).should.eventually.equal('test2');
+            return mysql.createNewTable({table:'test2', headers:['email', 'first', 'last'], overwrite: true}).should.eventually.equal('test2');
         });
         
         it('Reject When Trying to Create a Staging Table from a Non-Exsting Table', function(){
@@ -80,7 +80,7 @@ describe('Table Methods', function(){
         });
         
         it('Reject When Trying to Create a New Table and One With That Name Already Exists', function(){
-            return mysql.createNewTable('test').should.eventually.be.rejected;
+            return mysql.createNewTable({table:'test'}).should.eventually.be.rejected;
         });
     });
     
@@ -105,12 +105,6 @@ describe('File Methods', function(){
     before(function(done){
         mysql.query('CREATE TABLE IF NOT EXISTS data (email VARCHAR(255), first VARCHAR(255), last VARCHAR(255))')
         .then(function(){
-            return mysql.query('DROP TABLE IF EXISTS datamerge1');
-        })
-        .then(function(){
-            return mysql.query('DROP TABLE IF EXISTS datamerge2');
-        })
-        .then(function(){
             done();
         }).catch(done);
     });
@@ -120,17 +114,17 @@ describe('File Methods', function(){
         .then(function(){
             return mysql.query('DROP TABLE IF EXISTS data2');
         })
-        // .then(function(){
-        //     return mysql.query('DROP TABLE IF EXISTS datamerge1');
-        // })
-        // .then(function(){
-        //     return mysql.query('DROP TABLE IF EXISTS datamerge2');
-        // })
         .then(function(){
             return new Promise(function(resolve,reject){
                 fs.unlink('./test/export.csv', function(err){
                     if(err) return reject();
-                    resolve();
+                    fs.unlink('./test/merged.csv', function(err){
+                        if(err) return reject();
+                        fs.unlink('./test/merged2.csv', function(err){
+                            if(err) return reject();
+                            resolve();
+                        });
+                    });
                 });
             });
         }).then(function(){ done();}).catch(done);
@@ -150,7 +144,7 @@ describe('File Methods', function(){
         it('Exports a table to a file', function(done){
             mysql.exportFileFromTable({filepath: __dirname + '/export.csv', table: 'data2'})
             .then(function(results){
-                results.should.equal(4);
+                results.should.equal(5);
                 fs.existsSync(__dirname + '/export.csv').should.equal(true);
                 done();
             }).catch(done);
@@ -158,23 +152,64 @@ describe('File Methods', function(){
     });
     
     describe('Merging', function(){
-        it('Merges Multiple Files into a Single File', function(done){
+        it('Merges Two Files into a Single File', function(done){
             let files = [
                 {
                     filepath: './test/data.csv',
                     table: 'datamerge1',
-                    index: 'email'
+                    index: 'email',
+                    quotes: '"'
                 },
                 {
                     filepath: './test/data2.csv',
                     table: 'datamerge2',
                     index: 'email',
+                    quotes: '"',
                 }
-            ];
+            ];           
             
-            mysql.mergeFiles(files, __dirname + 'merged.csv')
+            let mapping = {
+                "datamerge1.datamerge1_email": "datamerge2.datamerge2_email",    
+            };
+            
+            mysql.mergeFiles(files, mapping, __dirname + '/merged.csv')
             .then(function(){
                 fs.existsSync(__dirname + '/merged.csv').should.equal(true);
+                done();
+            }).catch(done);
+        });
+        
+        it('Merges Three Files with Differing Keys', function(done){
+            let files = [
+                {
+                    filepath: './test/data.csv',
+                    table: 'customers',
+                    index: 'email',
+                    quotes: '"'
+                },
+                {
+                    filepath: './test/data2.csv',
+                    table: 'alliances',
+                    index: ['email','allianceid'],
+                    quotes: '"',
+                },
+                {
+                    filepath: './test/data3.csv',
+                    table: 'weapons',
+                    index: 'allianceid',
+                    quotes: '"',
+                }
+            ];           
+            
+            let mapping = {
+                "customers.customers_email": "alliances.alliances_email",
+                "weapons.weapons_allianceid": "alliances.alliances_allianceid"
+            };
+            
+            mysql.mergeFiles(files, mapping, __dirname + '/merged2.csv')
+            .then(function(results){
+                console.log('Records exported', results);
+                fs.existsSync(__dirname + '/merged2.csv').should.equal(true);
                 done();
             }).catch(done);
         });
